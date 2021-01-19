@@ -7,6 +7,8 @@ import (
 	"io"
 )
 
+const RCSuccess uint32 = 0
+
 type Command uint32
 
 const (

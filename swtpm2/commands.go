@@ -18,6 +18,21 @@ type Commands interface {
 	ReadPublicNV(index tpmutil.Handle) (*tpm2.NVPublic, error)
 }
 
+// NewLoopProcessCommand processes a sequence of commands until an error is obtained
+func NewLoopProcessCommand(commands Commands) func(rw io.ReadWriter) {
+	return func(rw io.ReadWriter) {
+		for {
+			b, err := ProcessCommand(rw, commands)
+			if err != nil {
+				break
+			}
+			if _, err = rw.Write(b); err != nil {
+				break
+			}
+		}
+	}
+}
+
 // ProcessCommand tries to decode command and invoke an appropriate method of `Commands` interface
 // Returns an error if further commands processing is impossible
 func ProcessCommand(r io.Reader, commands Commands) ([]byte, error) {

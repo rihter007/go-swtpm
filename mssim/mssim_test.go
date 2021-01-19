@@ -101,7 +101,7 @@ func TestMSSIM(t *testing.T) {
 			b, err := swtpm2.ProcessCommand(bytes.NewBuffer(request.InternalCommand), m)
 			require.NoError(t, err)
 
-			result, err := mssim.CreateResponse(0, b)
+			result, err := mssim.CreateResponse(mssim.RCSuccess, b)
 			require.NoError(t, err)
 			if _, err := c.Write(result); err != nil {
 				panic(err)
