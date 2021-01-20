@@ -16,6 +16,10 @@ var RCFail = tpmutil.RCSuccess + 1
 type Commands interface {
 	ReadPublic(handle tpmutil.Handle) (*ReadPublicResponse, error)
 	ReadPublicNV(index tpmutil.Handle) (*tpm2.NVPublic, error)
+	// GetCapability division
+	GetCapabilityPCRs(count, property uint32) ([]tpm2.PCRSelection, error)
+
+	StartAuthSession(tpmKey, bindKey tpmutil.Handle, nonceCaller, secret []byte, se tpm2.SessionType, sym, hashAlg tpm2.Algorithm) (tpmutil.Handle, []byte, error)
 }
 
 // NewLoopProcessCommand processes a sequence of commands until an error is obtained
@@ -108,6 +112,63 @@ func executeCommand(ch CommandHeader, b []byte, commands Commands) ([]byte, erro
 			return nil, err
 		}
 		return tpmutil.Pack(tpmutil.U16Bytes(raw))
+	case tpm2.CmdGetCapability:
+		var capa tpm2.Capability
+		var count uint32
+		var property uint32
+
+		_, err := tpmutil.Unpack(b, &capa, &property, &count)
+		if err != nil {
+			return nil, err
+		}
+
+		switch capa {
+		case tpm2.CapabilityPCRs:
+			pcrs, err := commands.GetCapabilityPCRs(count, property)
+			if err != nil {
+				return nil, err
+			}
+			pcrSelection, err := EncodePCRSelection(pcrs...)
+			if err != nil {
+				return nil, err
+			}
+
+			header, err := tpmutil.Pack(false, tpm2.CapabilityPCRs)
+			if err != nil {
+				return nil, err
+			}
+
+			result := header
+			result = append(result, pcrSelection...)
+			return result, nil
+		default:
+			return nil, fmt.Errorf("capability %d is not supported", capa)
+		}
+
+	case tpm2.CmdStartAuthSession:
+		var tpmKey tpmutil.Handle
+		var bindKey tpmutil.Handle
+
+		read, err := tpmutil.Unpack(b, &tpmKey, &bindKey)
+		if err != nil {
+			return nil, err
+		}
+
+		var nonceCaller tpmutil.U16Bytes
+		var secret tpmutil.U16Bytes
+		var se tpm2.SessionType
+		var sym tpm2.Algorithm
+		var hashAlg tpm2.Algorithm
+		if _, err = tpmutil.Unpack(b[read:], &nonceCaller, &secret, &se, &sym, &hashAlg); err != nil {
+			return nil, err
+		}
+
+		handle, nonce, err := commands.StartAuthSession(tpmKey, bindKey, nonceCaller, secret, se, sym, hashAlg)
+		if err != nil {
+			return nil, err
+		}
+
+		return tpmutil.Pack(handle, tpmutil.U16Bytes(nonce))
 	}
 	return nil, fmt.Errorf("command %d is not supported", ch.Cmd)
 }
